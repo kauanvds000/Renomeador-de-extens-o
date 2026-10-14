@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mudar extensão</title>
+<style>
+:root{--bg:#f6f5f1;--card:#fff;--text:#1d1d1b;--muted:#6b6a64;--accent:#2d6a4f;--border:#d9d6cc}
+@media (prefers-color-scheme:dark){:root{--bg:#161614;--card:#211f1d;--text:#efede6;--muted:#9a978c;--accent:#74c69d;--border:#3a3835}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;padding:24px}
+main{max-width:720px;margin:0 auto}
+h1{font-size:1.5rem;margin:0 0 4px}
+p.sub{color:var(--muted);margin:0 0 20px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+label{font-weight:600}
+.ext{display:flex;align-items:center;border:1px solid var(--border);background:var(--card);border-radius:8px;padding:0 10px}
+.ext input{border:0;background:transparent;color:var(--text);font-size:1rem;padding:9px 4px;width:90px;outline:none}
+#drop{border:2px dashed var(--border);border-radius:14px;background:var(--card);padding:40px 16px;text-align:center;cursor:pointer;transition:.15s}
+#drop.over{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--card))}
+#drop b{display:block;font-size:1.1rem;margin-bottom:4px}
+#drop span{color:var(--muted)}
+button{font:inherit;border:0;border-radius:8px;padding:10px 16px;cursor:pointer;background:var(--accent);color:#fff;font-weight:600}
+button.sec{background:transparent;color:var(--text);border:1px solid var(--border)}
+button:disabled{opacity:.4;cursor:default}
+ul{list-style:none;padding:0;margin:16px 0}
+li{display:flex;justify-content:space-between;gap:10px;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:9px 12px;margin-bottom:6px;font-size:.92rem}
+li .n{overflow-wrap:anywhere}
+li .old{color:var(--muted);text-decoration:line-through;margin-right:8px}
+li a{color:var(--accent);cursor:pointer;white-space:nowrap;font-weight:600}
+.note{color:var(--muted);font-size:.85rem;margin-top:16px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Mudar extensão de ficheiros</h1>
+  <p class="sub">Larga vários ficheiros e eles passam a ter a extensão que escolheres.</p>
+
+  <div class="row">
+    <label>Nova extensão:</label>
+    <div class="ext">.<input id="ext" value="jpg" spellcheck="false"></div>
+  </div>
+
+  <div id="drop"><b>Larga aqui os ficheiros</b><span>ou clica para escolher</span></div>
+  <input id="pick" type="file" multiple hidden>
+
+  <ul id="list"></ul>
+
+  <div class="row">
+    <button id="zip" disabled>Descarregar tudo (ZIP)</button>
+    <button id="each" class="sec" disabled>Descarregar um a um</button>
+    <button id="clear" class="sec" disabled>Limpar</button>
+  </div>
+  <p class="note">Isto só muda o nome, não converte a imagem. Um ficheiro que não seja mesmo uma imagem continua a não abrir como imagem.</p>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+let files = [];
+const $ = id => document.getElementById(id);
+const drop = $('drop'), pick = $('pick'), list = $('list'), extIn = $('ext');
+
+const ext = () => extIn.value.trim().replace(/^\./, '') || 'jpg';
+function newName(name){
+  const i = name.lastIndexOf('.');
+  const base = i > 0 ? name.slice(0, i) : name;
+  return base + '.' + ext();
+}
+function uniqueNames(){
+  const used = {}, out = [];
+  for (const f of files){
+    let n = newName(f.name), k = 1;
+    while (used[n.toLowerCase()]){ const i = n.lastIndexOf('.'); n = n.slice(0,i) + '_' + (k++) + n.slice(i); }
+    used[n.toLowerCase()] = 1; out.push(n);
+  }
+  return out;
+}
+function render(){
+  const names = uniqueNames();
+  list.innerHTML = '';
+  files.forEach((f, i) => {
+    const li = document.createElement('li');
+    li.innerHTML = '<span class="n"><span class="old"></span><b></b></span><a>descarregar</a>';
+    li.querySelector('.old').textContent = f.name;
+    li.querySelector('b').textContent = names[i];
+    li.querySelector('a').onclick = () => save(f, names[i]);
+    list.appendChild(li);
+  });
+  const has = files.length > 0;
+  $('zip').disabled = $('each').disabled = $('clear').disabled = !has;
+}
+function save(blob, name){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+function add(fl){ files = files.concat([...fl]); render(); }
+
+drop.onclick = () => pick.click();
+pick.onchange = e => { add(e.target.files); pick.value = ''; };
+drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); add(e.dataTransfer.files); };
+extIn.oninput = render;
+$('clear').onclick = () => { files = []; render(); };
+$('each').onclick = () => {
+  const names = uniqueNames();
+  files.forEach((f, i) => setTimeout(() => save(f, names[i]), i * 250));
+};
+$('zip').onclick = async () => {
+  if (typeof JSZip === 'undefined'){ alert('Sem internet para carregar o ZIP. Usa "Descarregar um a um".'); return; }
+  const names = uniqueNames(), z = new JSZip();
+  files.forEach((f, i) => z.file(names[i], f));
+  save(await z.generateAsync({type:'blob'}), 'ficheiros.zip');
+};
+</script>
+</body>
+</html>
